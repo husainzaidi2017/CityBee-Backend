@@ -1,9 +1,52 @@
 import { Body, Controller, Get, Patch } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsNumber, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
 import { CurrentUser } from '../auth/auth-user.decorator';
 import { AuthUser } from '../auth/auth-user.decorator';
 import { UsersService } from './users.service';
+
+export class SelectedLocationDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  name?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  latitude?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  longitude?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  googlePlaceId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  country?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2)
+  countryCode?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  state?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  locality?: string;
+}
 
 export class UpdateProfileDto {
   @IsOptional()
@@ -23,6 +66,9 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsUUID()
   selectedCityId?: string;
+
+  @IsOptional()
+  selectedLocation?: SelectedLocationDto;
 }
 
 @ApiTags('users')
@@ -32,7 +78,7 @@ export class UsersController {
   constructor(private readonly users: UsersService) {}
 
   @Get('me')
-  @ApiOperation({ summary: 'Current user profile (creates the mirror row on first call)' })
+  @ApiOperation({ summary: 'Current user profile + selected location (creates the mirror row on first call)' })
   me(@CurrentUser() user: AuthUser) {
     return this.users.ensureAndMe(user);
   }

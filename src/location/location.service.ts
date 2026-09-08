@@ -9,22 +9,23 @@ export interface LocationSuggestion {
 
 export interface ResolvedLocation {
   placeId: string;
-  name: string;
-  stateRegion?: string;
-  country: string;
-  countryCode?: string;
+  displayName: string;
+  formattedAddress?: string;
   latitude: number;
   longitude: number;
+  country?: string;
+  countryCode?: string;
+  state?: string;
+  locality?: string;
 }
 
 /**
- * Server-side Google Places proxy.
+ * Server-side Google Places/Geocoding proxy.
  *
- * The API key lives only in the backend env — Flutter never sees it. Guests
- * can search locations (location discovery is public content per the spec).
- *
- * Uses the Places API (New): `places:autocomplete` for suggestions and
- * `places/{id}` for details, with the classic Autocomplete as fallback.
+ * The API key lives only in the backend env — Flutter never sees it.
+ * This service is pure location resolution: it NEVER creates `cities`
+ * rows. A Google-selected location is the user's chosen search origin,
+ * not CityBee reference data (see migrations/0005).
  */
 @Injectable()
 export class LocationService {
@@ -91,7 +92,7 @@ export class LocationService {
       predictions?: { place_id: string; structured_formatting?: { main_text?: string; secondary_text?: string } }[];
     };
     if (data.status === 'REQUEST_DENIED') {
-      this.logger.error(`Google Places denied the request — check API enablement/key restrictions.`);
+      this.logger.error('Google Places denied the request — check API enablement/key restrictions.');
       throw new BadRequestException('Location search is not available right now.');
     }
     return (data.predictions ?? []).slice(0, 8).map((p) => ({
@@ -119,21 +120,26 @@ export class LocationService {
         const data = (await res.json()) as {
           id?: string;
           displayName?: { text?: string };
+          formattedAddress?: string;
           addressComponents?: { longText?: string; shortText?: string; types?: string[] }[];
           location?: { latitude: number; longitude: number };
         };
         const comp = (type: string) =>
           data.addressComponents?.find((c) => c.types?.includes(type));
         const locality =
-          comp('locality')?.longText ?? comp('postal_town')?.longText ?? comp('administrative_area_level_3')?.longText;
+          comp('locality')?.longText ??
+          comp('postal_town')?.longText ??
+          comp('administrative_area_level_3')?.longText;
         return {
           placeId: data.id ?? placeId,
-          name: locality ?? data.displayName?.text ?? '',
-          stateRegion: comp('administrative_area_level_1')?.longText,
-          country: comp('country')?.longText ?? '',
-          countryCode: comp('country')?.shortText,
+          displayName: locality ?? data.displayName?.text ?? '',
+          formattedAddress: data.formattedAddress,
           latitude: data.location?.latitude ?? 0,
           longitude: data.location?.longitude ?? 0,
+          country: comp('country')?.longText,
+          countryCode: comp('country')?.shortText,
+          state: comp('administrative_area_level_1')?.longText,
+          locality: locality,
         };
       }
       this.logger.warn(`Places details (new) failed: ${res.status}`);
@@ -143,13 +149,14 @@ export class LocationService {
 
     // Classic details fallback
     const res = await fetch(
-      `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(placeId)}&fields=name,geometry,address_components,formatted_address&key=${key}`,
+      `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(placeId)}&fields=name,formatted_address,geometry,address_components&key=${key}`,
     );
     if (!res.ok) throw new BadRequestException('Could not resolve that location.');
     const data = (await res.json()) as {
       status: string;
       result?: {
         name?: string;
+        formatted_address?: string;
         geometry?: { location?: { lat: number; lng: number } };
         address_components?: { long_name?: string; short_name?: string; types?: string[] }[];
       };
@@ -163,12 +170,56 @@ export class LocationService {
       comp('locality')?.long_name ?? comp('postal_town')?.long_name ?? comp('administrative_area_level_3')?.long_name;
     return {
       placeId,
-      name: locality ?? data.result.name ?? '',
-      stateRegion: comp('administrative_area_level_1')?.long_name,
-      country: comp('country')?.long_name ?? '',
-      countryCode: comp('country')?.short_name,
+      displayName: locality ?? data.result.name ?? '',
+      formattedAddress: data.result.formatted_address,
       latitude: data.result.geometry?.location?.lat ?? 0,
       longitude: data.result.geometry?.location?.lng ?? 0,
+      country: comp('country')?.long_name,
+      countryCode: comp('country')?.short_name,
+      state: comp('administrative_area_level_1')?.long_name,
+      locality: locality,
+    };
+  }
+
+  /** Reverse geocoding for "use my current location" — never creates cities. */
+  async reverse(lat: number, lng: number): Promise<ResolvedLocation> {
+    const key = this.key;
+    const res = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&language=en&key=${key}`,
+    );
+    if (!res.ok) throw new BadRequestException('Could not detect your location.');
+    const data = (await res.json()) as {
+      status: string;
+      results?: {
+        formatted_address?: string;
+        address_components?: { long_name?: string; short_name?: string; types?: string[] }[];
+        place_id?: string;
+        geometry?: { location?: { lat: number; lng: number } };
+      }[];
+    };
+    if (data.status !== 'OK' || !data.results?.length) {
+      throw new BadRequestException('Could not detect your location.');
+    }
+    const best = data.results[0];
+    const comp = (type: string) =>
+      best.address_components?.find((c) => c.types?.includes(type));
+    const locality =
+      comp('locality')?.long_name ??
+      comp('postal_town')?.long_name ??
+      comp('administrative_area_level_3')?.long_name ??
+      comp('administrative_area_level_2')?.long_name ??
+      comp('administrative_area_level_1')?.long_name ??
+      'Current location';
+    return {
+      placeId: best.place_id ?? '',
+      displayName: locality,
+      formattedAddress: best.formatted_address,
+      latitude: best.geometry?.location?.lat ?? lat,
+      longitude: best.geometry?.location?.lng ?? lng,
+      country: comp('country')?.long_name,
+      countryCode: comp('country')?.short_name,
+      state: comp('administrative_area_level_1')?.long_name,
+      locality: comp('locality')?.long_name ?? comp('postal_town')?.long_name,
     };
   }
 }

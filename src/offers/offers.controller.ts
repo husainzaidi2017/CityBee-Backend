@@ -25,8 +25,8 @@ export class OffersController {
 
   @Public()
   @Get('count')
-  count(@Query('city') city: string) {
-    return this.offers.countActive(city);
+  count(@Query('city') city: string, @Query('lat') lat?: string, @Query('lng') lng?: string) {
+    return this.offers.countActive(city, lat && lng ? { lat: Number(lat), lng: Number(lng) } : undefined);
   }
 
   @Public()

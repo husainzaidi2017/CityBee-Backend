@@ -26,8 +26,9 @@ export class CitiesService {
   }
 
   /**
-   * Cache-or-create a city from a Google Places selection. Called when a user
-   * picks a location; CityBee never maintains a master world-city list.
+   * Safe upsert for CityBee administrative flows (business onboarding).
+   * Deduplicates on slug AND google_place_id — never creates duplicates.
+   * NOT called from the Google Places location-selection flow.
    */
   async upsertFromPlaces(input: {
     name: string;
@@ -44,6 +45,19 @@ export class CitiesService {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '');
 
+    // Same Google place under a different slug → update the existing row.
+    if (input.googlePlaceId) {
+      const existingByPlace = await this.db`
+        update public.cities set
+          latitude = ${input.latitude},
+          longitude = ${input.longitude},
+          google_place_id = ${input.googlePlaceId},
+          updated_at = now()
+        where google_place_id = ${input.googlePlaceId}
+        returning slug, name, state_region as state_region, latitude, longitude`;
+      if (existingByPlace.length) return existingByPlace[0];
+    }
+
     const rows = await this.db`
       insert into public.cities (slug, name, state_region, country, country_code, latitude, longitude, google_place_id)
       values (${slug}, ${input.name}, ${input.stateRegion ?? null}, ${input.country ?? ''}, ${input.countryCode ?? null}, ${input.latitude}, ${input.longitude}, ${input.googlePlaceId ?? null})
@@ -52,7 +66,7 @@ export class CitiesService {
         longitude = excluded.longitude,
         google_place_id = coalesce(excluded.google_place_id, public.cities.google_place_id),
         updated_at = now()
-      returning slug, name, state_region, latitude, longitude`;
+      returning slug, name, state_region as state_region, latitude, longitude`;
     return rows[0];
   }
 }

@@ -54,10 +54,15 @@ export class NearbyBusinessesDto extends PaginationDto {
   @IsNumber()
   lng: number;
 
-  @ApiPropertyOptional({ example: 5000, description: 'Radius in meters' })
+  @ApiPropertyOptional({
+    example: 5000,
+    description:
+      'Optional radius in meters. Omit for progressive expansion (5→10→25→50→100 km) until the category has enough results.',
+  })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  radius: number = 5000;
+  radius?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -108,10 +113,11 @@ export class NearbyOffersDto extends PaginationDto {
   @IsNumber()
   lng: number;
 
-  @ApiPropertyOptional({ example: 5000 })
+  @ApiPropertyOptional({ example: 5000, description: 'Optional; omit for progressive expansion' })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  radius: number = 5000;
+  radius?: number;
 }
 
 export class ListPlacesDto extends PaginationDto {
@@ -136,10 +142,11 @@ export class NearbyPlacesDto extends PaginationDto {
   @IsNumber()
   lng: number;
 
-  @ApiPropertyOptional({ example: 10000 })
+  @ApiPropertyOptional({ example: 10000, description: 'Optional; omit for progressive expansion' })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  radius: number = 10000;
+  radius?: number;
 }
 
 export class SearchDto extends PaginationDto {

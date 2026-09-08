@@ -3,11 +3,14 @@ import { Fragment, Sql } from 'postgres';
 import { DATABASE } from '../database/database.module';
 import { PaginationDto, paginate } from '../common/dto/pagination.dto';
 import { BusinessRow, toBusiness } from './business.mapper';
+import { DiscoveryService } from '../discovery/discovery.service';
 
 export interface NearbyQuery extends PaginationDto {
   lat: number;
   lng: number;
-  radius: number; // meters
+  /** Explicit radius in meters; when omitted the backend expands progressively
+   *  (5→10→25→50→100 km) until the category has enough results. */
+  radius?: number;
   categorySlug?: string;
   kind?: string;
 }
@@ -20,7 +23,10 @@ export interface NearbyQuery extends PaginationDto {
  */
 @Injectable()
 export class BusinessesService {
-  constructor(@Inject(DATABASE) private readonly db: Sql) {}
+  constructor(
+    @Inject(DATABASE) private readonly db: Sql,
+    private readonly discovery: DiscoveryService,
+  ) {}
 
   /** Shared select list + base joins. Embed with `${this.baseSelect()}`. */
   private baseSelect(extras: Fragment[] = []) {
@@ -31,6 +37,7 @@ export class BusinessesService {
         b.is_pure_veg, b.is_verified, b.is_featured,
         st_y(b.location::geometry) as latitude,
         st_x(b.location::geometry) as longitude,
+        (select c.name from public.cities c where c.id = b.city_id) as city_name,
         d.name as doctor_name, d.specialization as doctor_specialization,
         d.qualification as doctor_qualification, d.experience_years as doctor_experience_years,
         d.consultation_fee as doctor_consultation_fee, d.bio as doctor_bio,
@@ -102,7 +109,7 @@ export class BusinessesService {
     const offset = (opts.page - 1) * opts.limit;
     const withDistance = opts.lat != null && opts.lng != null;
     const point = withDistance ? this.point(opts.lat!, opts.lng!) : null;
-    const extras: Fragment[] = [this.db`(select count(*) over () as total_rows) as total_rows`];
+    const extras: Fragment[] = [this.db`count(*) over () as total_rows`];
     if (point) extras.push(this.db`st_distance(b.location, ${point}) as distance_m`);
     const rows = (await this.db`
       ${this.baseSelect(extras)}
@@ -120,16 +127,25 @@ export class BusinessesService {
   }
 
   async nearby(q: NearbyQuery) {
+    // Progressive radius expansion: the backend decides how far to search
+    // based on the category's own minimum-result threshold.
+    const radius =
+      q.radius ??
+      (await this.discovery.effectiveRadius(q.lat, q.lng, {
+        categorySlug: q.categorySlug,
+        kind: q.kind,
+      }));
+
     const offset = (q.page - 1) * q.limit;
     const point = this.point(q.lat, q.lng);
     const rows = (await this.db`
       ${this.baseSelect([
         this.db`st_distance(b.location, ${point}) as distance_m`,
-        this.db`(select count(*) over () as total_rows) as total_rows`,
+        this.db`count(*) over () as total_rows`,
       ])}
       where b.status = 'approved'
         and b.location is not null
-        and st_dwithin(b.location, ${point}, ${q.radius})
+        and st_dwithin(b.location, ${point}, ${radius})
         ${q.categorySlug ? this.db`and exists (select 1 from public.business_categories bc join public.categories c on c.id = bc.category_id where bc.business_id = b.id and c.slug = ${q.categorySlug})` : this.db``}
         ${q.kind ? this.db`and b.kind = ${q.kind}` : this.db``}
       order by b.location <-> ${point}
@@ -137,14 +153,15 @@ export class BusinessesService {
     `) as Record<string, unknown>[];
 
     const total = rows.length ? Number(rows[0].total_rows) : 0;
-    return paginate(rows.map(BusinessesService.mapRow).map(toBusiness), total, q.page, q.limit);
+    const page = paginate(rows.map(BusinessesService.mapRow).map(toBusiness), total, q.page, q.limit);
+    return { ...page, searchRadiusKm: radius / 1000 };
   }
 
   async search(query: string, opts: { page: number; limit: number; citySlug?: string }) {
     const q = `%${query.trim()}%`;
     const offset = (opts.page - 1) * opts.limit;
     const rows = (await this.db`
-      ${this.baseSelect([this.db`(select count(*) over () as total_rows) as total_rows`])}
+      ${this.baseSelect([this.db`count(*) over () as total_rows`])}
       where b.status = 'approved'
         and (
           b.name ilike ${q}

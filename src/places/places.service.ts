@@ -2,10 +2,14 @@ import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Sql } from 'postgres';
 import { DATABASE } from '../database/database.module';
 import { PaginationDto, paginate } from '../common/dto/pagination.dto';
+import { DiscoveryService } from '../discovery/discovery.service';
 
 @Injectable()
 export class PlacesService {
-  constructor(@Inject(DATABASE) private readonly db: Sql) {}
+  constructor(
+    @Inject(DATABASE) private readonly db: Sql,
+    private readonly discovery: DiscoveryService,
+  ) {}
 
   private map(row: Record<string, unknown>, distanceM?: number | null) {
     const rating = Number(row.rating);
@@ -27,6 +31,7 @@ export class PlacesService {
       ratingText: `${rating.toFixed(1)} (${compact})`,
       tags: row.tags ?? [],
       address: row.address ?? '',
+      cityName: row.city_name ?? '',
       timings: row.timings ?? '',
       entryFee: row.entry_fee ?? '',
       latitude: row.lat,
@@ -43,7 +48,7 @@ export class PlacesService {
         st_y(p.location::geometry) as lat, st_x(p.location::geometry) as lng,
         (select image_url from public.place_images pi where pi.place_id = p.id order by pi.is_primary desc, pi.sort_order limit 1) as image,
         coalesce((select json_agg(c.slug) from public.categories c where c.id = p.category_id), '[]') as tags,
-        (select count(*) over () as total_rows) as total_rows
+        count(*) over () as total_rows
       from public.places p
       where p.is_active
         ${opts.citySlug ? this.db`and p.city_id = (select id from public.cities where slug = ${opts.citySlug})` : this.db``}
@@ -54,24 +59,27 @@ export class PlacesService {
     return paginate(rows.map((r) => this.map(r)), total, opts.page, opts.limit);
   }
 
-  async nearby(q: PaginationDto & { lat: number; lng: number; radius: number }) {
+  async nearby(q: PaginationDto & { lat: number; lng: number; radius?: number }) {
+    const radius = q.radius ?? (await this.discovery.effectiveRadius(q.lat, q.lng, { entity: 'place' }));
     const offset = (q.page - 1) * q.limit;
     const point = this.db`st_setsrid(st_makepoint(${q.lng}, ${q.lat}), 4326)::geography`;
     const rows = await this.db`
       select p.id, p.slug, p.name, p.description, p.rating, p.review_count, p.address,
         p.timings, p.entry_fee, p.is_featured,
         st_y(p.location::geometry) as lat, st_x(p.location::geometry) as lng,
+        (select c.name from public.cities c where c.id = p.city_id) as city_name,
         st_distance(p.location, ${point}) as distance_m,
         (select image_url from public.place_images pi where pi.place_id = p.id order by pi.is_primary desc, pi.sort_order limit 1) as image,
         coalesce((select json_agg(c.slug) from public.categories c where c.id = p.category_id), '[]') as tags,
-        (select count(*) over () as total_rows) as total_rows
+        count(*) over () as total_rows
       from public.places p
       where p.is_active and p.location is not null
-        and st_dwithin(p.location, ${point}, ${Number(q.radius)})
+        and st_dwithin(p.location, ${point}, ${radius})
       order by p.location <-> ${point}
       limit ${q.limit} offset ${offset}`;
     const total = rows.length ? Number(rows[0].total_rows) : 0;
-    return paginate(rows.map((r) => this.map(r, r.distance_m)), total, q.page, q.limit);
+    const page = paginate(rows.map((r) => this.map(r, r.distance_m)), total, q.page, q.limit);
+    return { ...page, searchRadiusKm: radius / 1000 };
   }
 
   async search(q: string, opts: PaginationDto) {
@@ -83,7 +91,7 @@ export class PlacesService {
         st_y(p.location::geometry) as lat, st_x(p.location::geometry) as lng,
         (select image_url from public.place_images pi where pi.place_id = p.id order by pi.is_primary desc, pi.sort_order limit 1) as image,
         coalesce((select json_agg(c.slug) from public.categories c where c.id = p.category_id), '[]') as tags,
-        (select count(*) over () as total_rows) as total_rows
+        count(*) over () as total_rows
       from public.places p
       where p.is_active and (p.name ilike ${term} or p.description ilike ${term})
       order by p.rating desc

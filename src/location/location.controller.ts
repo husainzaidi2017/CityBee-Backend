@@ -1,9 +1,9 @@
 import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsString, MaxLength } from 'class-validator';
+import { IsNumber, IsString, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
 import { Public } from '../auth/public.decorator';
 import { LocationService } from './location.service';
-import { CitiesService } from '../cities/cities.service';
 
 export class SearchLocationDto {
   @IsString()
@@ -17,17 +17,28 @@ export class ResolveLocationDto {
   placeId: string;
 }
 
+export class ReverseLocationDto {
+  @Type(() => Number)
+  @IsNumber()
+  lat: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  lng: number;
+}
+
 /**
- * Dynamic location discovery backed by Google Places. The key stays
- * server-side; Flutter calls these endpoints only.
+ * Dynamic location discovery backed by Google. The key stays server-side;
+ * Flutter calls these endpoints only.
+ *
+ * NOTE: resolving a Google place NEVER creates a `cities` row — the selected
+ * location is client/user state (see /users/me selected_location_* fields),
+ * while `cities` remains CityBee reference data.
  */
 @ApiTags('location')
 @Controller('location')
 export class LocationController {
-  constructor(
-    private readonly location: LocationService,
-    private readonly cities: CitiesService,
-  ) {}
+  constructor(private readonly location: LocationService) {}
 
   @Public()
   @Get('search')
@@ -38,34 +49,19 @@ export class LocationController {
 
   @Public()
   @Get('resolve')
-  @ApiOperation({
-    summary: 'Resolve a place_id to coordinates and cache it as a CityBee city (idempotent)',
-  })
+  @ApiOperation({ summary: 'Resolve a place_id to name/coordinates/address (no city is created)' })
   async resolve(@Query() dto: ResolveLocationDto) {
     const resolved = await this.location.resolve(dto.placeId);
-    if (!resolved.name) {
+    if (!resolved.displayName) {
       throw new BadRequestException('Could not resolve that location.');
     }
-    const city = await this.cities.upsertFromPlaces({
-      name: resolved.name,
-      stateRegion: resolved.stateRegion,
-      country: resolved.country,
-      countryCode: resolved.countryCode,
-      latitude: resolved.latitude,
-      longitude: resolved.longitude,
-      googlePlaceId: resolved.placeId,
-    });
-    // Same shape as GET /cities rows so the Flutter City mapper works as-is.
-    return {
-      id: city.slug,
-      slug: city.slug,
-      name: city.name,
-      state_region: city.state_region,
-      nickname: '',
-      default_area: resolved.name,
-      latitude: city.latitude,
-      longitude: city.longitude,
-      google_place_id: resolved.placeId,
-    };
+    return resolved;
+  }
+
+  @Public()
+  @Get('reverse')
+  @ApiOperation({ summary: 'Reverse geocode GPS coordinates to a location (no city is created)' })
+  reverse(@Query() dto: ReverseLocationDto) {
+    return this.location.reverse(dto.lat, dto.lng);
   }
 }

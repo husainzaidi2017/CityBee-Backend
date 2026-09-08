@@ -2,6 +2,7 @@ import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Sql } from 'postgres';
 import { DATABASE } from '../database/database.module';
 import { PaginationDto, paginate } from '../common/dto/pagination.dto';
+import { DiscoveryService } from '../discovery/discovery.service';
 
 /**
  * Offers are returned joined with their business so the Flutter card can
@@ -9,7 +10,10 @@ import { PaginationDto, paginate } from '../common/dto/pagination.dto';
  */
 @Injectable()
 export class OffersService {
-  constructor(@Inject(DATABASE) private readonly db: Sql) {}
+  constructor(
+    @Inject(DATABASE) private readonly db: Sql,
+    private readonly discovery: DiscoveryService,
+  ) {}
 
   private map(row: Record<string, unknown>, distanceM?: number | null) {
     const validUntil = row.valid_until as string | null;
@@ -28,6 +32,7 @@ export class OffersService {
       image: row.image,
       rating: Number(row.rating),
       area: row.locality ?? '',
+      cityName: row.city_name ?? '',
       distanceText: distanceM != null ? `${(distanceM / 1000).toFixed(1)} km` : null,
       featured: row.is_featured,
     };
@@ -41,7 +46,7 @@ export class OffersService {
         (select image_url from public.offer_images oi where oi.offer_id = o.id order by oi.is_primary desc, oi.sort_order limit 1) as image,
         b.id as business_id, b.slug as business_slug, b.name as business_name,
         b.rating, b.locality,
-        (select count(*) over () as total_rows) as total_rows
+        count(*) over () as total_rows
       from public.offers o
       join public.businesses b on b.id = o.business_id
       where o.status = 'active'
@@ -54,7 +59,9 @@ export class OffersService {
     return paginate(rows.map((r) => this.map(r)), total, opts.page, opts.limit);
   }
 
-  async nearby(q: PaginationDto & { lat: number; lng: number; radius: number }) {
+  async nearby(q: PaginationDto & { lat: number; lng: number; radius?: number }) {
+    // Progressive expansion when the caller doesn't pin a radius.
+    const radius = q.radius ?? (await this.discovery.effectiveRadius(q.lat, q.lng, { entity: 'offer' }));
     const offset = (q.page - 1) * q.limit;
     const point = this.db`st_setsrid(st_makepoint(${q.lng}, ${q.lat}), 4326)::geography`;
     const rows = await this.db`
@@ -63,16 +70,18 @@ export class OffersService {
         (select image_url from public.offer_images oi where oi.offer_id = o.id order by oi.is_primary desc, oi.sort_order limit 1) as image,
         b.id as business_id, b.slug as business_slug, b.name as business_name,
         b.rating, b.locality,
+        (select c.name from public.cities c where c.id = b.city_id) as city_name,
         st_distance(b.location, ${point}) as distance_m,
-        (select count(*) over () as total_rows) as total_rows
+        count(*) over () as total_rows
       from public.offers o
       join public.businesses b on b.id = o.business_id
       where o.status = 'active' and b.location is not null
-        and st_dwithin(b.location, ${point}, ${Number(q.radius)})
+        and st_dwithin(b.location, ${point}, ${radius})
       order by b.location <-> ${point}
       limit ${q.limit} offset ${offset}`;
     const total = rows.length ? Number(rows[0].total_rows) : 0;
-    return paginate(rows.map((r) => this.map(r, r.distance_m)), total, q.page, q.limit);
+    const page = paginate(rows.map((r) => this.map(r, r.distance_m)), total, q.page, q.limit);
+    return { ...page, searchRadiusKm: radius / 1000 };
   }
 
   async findByIdOrSlug(id: string) {
@@ -104,7 +113,17 @@ export class OffersService {
     };
   }
 
-  async countActive(citySlug?: string) {
+  async countActive(citySlug?: string, coords?: { lat: number; lng: number }) {
+    if (coords) {
+      // Count within the effective discovery radius around the coordinates.
+      const radius = await this.discovery.effectiveRadius(coords.lat, coords.lng, { entity: 'offer' });
+      const point = this.db`st_setsrid(st_makepoint(${coords.lng}, ${coords.lat}), 4326)::geography`;
+      const rows = await this.db`
+        select count(*)::int as n from public.offers o join public.businesses b on b.id = o.business_id
+        where o.status = 'active' and b.location is not null
+          and st_dwithin(b.location, ${point}, ${radius})`;
+      return rows[0].n;
+    }
     const rows = await this.db`
       select count(*)::int as n from public.offers o join public.businesses b on b.id = o.business_id
       where o.status = 'active'

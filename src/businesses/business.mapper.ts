@@ -27,6 +27,7 @@ export interface BusinessRow {
   latitude: number;
   longitude: number;
   distance_m: number | null;
+  city_name?: string | null;
   images?: { url: string; public_id: string | null }[];
   doctor?: {
     name: string;
@@ -84,7 +85,11 @@ export function toBusiness(row: BusinessRow) {
     ratingCount: row.review_count,
     address: row.address,
     area: row.locality ?? '',
+    // Actual CityBee city of the business (e.g. "Hubli") — distinct from the
+    // user's selected location; used with distance for honest display.
+    cityName: row.city_name ?? '',
     distanceKm: row.distance_m != null ? Math.round((row.distance_m / 1000) * 10) / 10 : null,
+    distanceMeters: row.distance_m != null ? Math.round(Number(row.distance_m)) : null,
     phone: row.phone ?? '',
     whatsapp: row.whatsapp ?? '',
     website: row.website,

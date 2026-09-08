@@ -9,6 +9,7 @@ import { UsersModule } from './users/users.module';
 import { CategoriesModule } from './categories/categories.module';
 import { CitiesModule } from './cities/cities.module';
 import { LocationModule } from './location/location.module';
+import { DiscoveryModule } from './discovery/discovery.module';
 import { BusinessesModule } from './businesses/businesses.module';
 import { OffersModule } from './offers/offers.module';
 import { DoctorsModule } from './doctors/doctors.module';
@@ -31,6 +32,7 @@ import { UploadsModule } from './uploads/uploads.module';
     CategoriesModule,
     CitiesModule,
     LocationModule,
+    DiscoveryModule,
     BusinessesModule,
     OffersModule,
     DoctorsModule,

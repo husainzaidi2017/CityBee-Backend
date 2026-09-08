@@ -27,7 +27,10 @@ export class BusinessesController {
 
   @Public()
   @Get('nearby')
-  @ApiOperation({ summary: 'Businesses within a radius (PostGIS ST_DWithin), sorted by distance' })
+  @ApiOperation({
+    summary:
+      'Businesses near a point (PostGIS). Without radius: progressive expansion until enough results.',
+  })
   nearby(@Query() q: NearbyBusinessesDto) {
     return this.businesses.nearby({
       page: q.page,
