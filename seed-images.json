@@ -1,0 +1,174 @@
+{
+  "businesses": {
+    "royal-mughal": [
+      {
+        "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886807/citybee/demo/csdxdkhc2xwe6g9xdkd1.png",
+        "public_id": "citybee/demo/csdxdkhc2xwe6g9xdkd1",
+        "sort": 0,
+        "primary": true
+      },
+      {
+        "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886808/citybee/demo/wweqet4ualogxxc1x149.png",
+        "public_id": "citybee/demo/wweqet4ualogxxc1x149",
+        "sort": 1,
+        "primary": false
+      },
+      {
+        "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886809/citybee/demo/jhfmougraomvwx274jfh.png",
+        "public_id": "citybee/demo/jhfmougraomvwx274jfh",
+        "sort": 2,
+        "primary": false
+      }
+    ],
+    "peeli-batti-biryani": [
+      {
+        "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886810/citybee/demo/uhw8bzbj5bjotjzzkghl.png",
+        "public_id": "citybee/demo/uhw8bzbj5bjotjzzkghl",
+        "sort": 0,
+        "primary": true
+      }
+    ],
+    "brass-cafe": [
+      {
+        "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886811/citybee/demo/hutaghxay1aycm9vdcf8.png",
+        "public_id": "citybee/demo/hutaghxay1aycm9vdcf8",
+        "sort": 0,
+        "primary": true
+      }
+    ],
+    "mughal-dastarkhwan": [
+      {
+        "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886812/citybee/demo/jkgftfcdkvan3ppqt7r4.png",
+        "public_id": "citybee/demo/jkgftfcdkvan3ppqt7r4",
+        "sort": 0,
+        "primary": true
+      }
+    ],
+    "verma-dental": [
+      {
+        "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886814/citybee/demo/hjo6q2p8it58fanxmeyo.png",
+        "public_id": "citybee/demo/hjo6q2p8it58fanxmeyo",
+        "sort": 0,
+        "primary": true
+      }
+    ],
+    "trends-n-threads": [
+      {
+        "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886815/citybee/demo/oejzpkqkwdjn9dkplett.png",
+        "public_id": "citybee/demo/oejzpkqkwdjn9dkplett",
+        "sort": 0,
+        "primary": true
+      }
+    ],
+    "brassware-corner": [
+      {
+        "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886816/citybee/demo/c4m4h0xahq13n0rccrns.png",
+        "public_id": "citybee/demo/c4m4h0xahq13n0rccrns",
+        "sort": 0,
+        "primary": true
+      }
+    ],
+    "glow-glam": [
+      {
+        "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886817/citybee/demo/t3bcp88ysi7xoq0i23ui.png",
+        "public_id": "citybee/demo/t3bcp88ysi7xoq0i23ui",
+        "sort": 0,
+        "primary": true
+      }
+    ],
+    "brass-palace-hotel": [
+      {
+        "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886818/citybee/demo/bd9uvet3zjdu0vqx5w1g.png",
+        "public_id": "citybee/demo/bd9uvet3zjdu0vqx5w1g",
+        "sort": 0,
+        "primary": true
+      },
+      {
+        "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886819/citybee/demo/cipizo6xexwxkay7d0b9.png",
+        "public_id": "citybee/demo/cipizo6xexwxkay7d0b9",
+        "sort": 1,
+        "primary": false
+      }
+    ],
+    "grand-heritage-inn": [
+      {
+        "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886821/citybee/demo/vzncbgvctahojjzwbdzv.png",
+        "public_id": "citybee/demo/vzncbgvctahojjzwbdzv",
+        "sort": 0,
+        "primary": true
+      }
+    ],
+    "city-central-mall": [
+      {
+        "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886821/citybee/demo/y1ack2sjqkvfai8e8ofh.png",
+        "public_id": "citybee/demo/y1ack2sjqkvfai8e8ofh",
+        "sort": 0,
+        "primary": true
+      }
+    ],
+    "mor-fresh-mart": [
+      {
+        "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886823/citybee/demo/rwq4edbnn3oveyqxhgtw.png",
+        "public_id": "citybee/demo/rwq4edbnn3oveyqxhgtw",
+        "sort": 0,
+        "primary": true
+      }
+    ],
+    "the-barber-lounge": [
+      {
+        "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886825/citybee/demo/raxkdfwfodp8fc0jewq3.png",
+        "public_id": "citybee/demo/raxkdfwfodp8fc0jewq3",
+        "sort": 0,
+        "primary": true
+      }
+    ]
+  },
+  "places": {
+    "peetal-nagri-museum": {
+      "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886827/citybee/demo/jik0x9txse6at0ibf4xu.png",
+      "public_id": "citybee/demo/jik0x9txse6at0ibf4xu"
+    },
+    "jhanda-chowk-bazaar": {
+      "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886829/citybee/demo/ktfzdbuysrwrorwwtol8.png",
+      "public_id": "citybee/demo/ktfzdbuysrwrorwwtol8"
+    },
+    "rambagh-dham-park": {
+      "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886831/citybee/demo/ekffavwodwp0kd4mqqwy.png",
+      "public_id": "citybee/demo/ekffavwodwp0kd4mqqwy"
+    },
+    "prem-mandir-temple": {
+      "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886832/citybee/demo/ynhghpx7qsrhhwqkzyhb.png",
+      "public_id": "citybee/demo/ynhghpx7qsrhhwqkzyhb"
+    },
+    "city-forest-lake": {
+      "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886833/citybee/demo/fmkry7bageeuggksukhr.png",
+      "public_id": "citybee/demo/fmkry7bageeuggksukhr"
+    }
+  },
+  "offers": {
+    "handicraft-featured": {
+      "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886834/citybee/demo/pxins1lgo8brncnpadl1.png",
+      "public_id": "citybee/demo/pxins1lgo8brncnpadl1"
+    },
+    "royal-mughal-offer": {
+      "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886835/citybee/demo/dfkytpbiwfffyxekxouj.png",
+      "public_id": "citybee/demo/dfkytpbiwfffyxekxouj"
+    },
+    "trends-n-threads-offer": {
+      "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886836/citybee/demo/dsbxqlnlozprellrqqgt.png",
+      "public_id": "citybee/demo/dsbxqlnlozprellrqqgt"
+    },
+    "verma-dental-offer": {
+      "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886837/citybee/demo/oxzlzwbacikp9ekxne9f.png",
+      "public_id": "citybee/demo/oxzlzwbacikp9ekxne9f"
+    },
+    "brassware-offer": {
+      "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886838/citybee/demo/cucqzjxpig156h4fjgxi.png",
+      "public_id": "citybee/demo/cucqzjxpig156h4fjgxi"
+    },
+    "glow-glam-offer": {
+      "url": "https://res.cloudinary.com/egzlojgo/image/upload/v1788886839/citybee/demo/hj7xjcuykpwltf0cnbeu.png",
+      "public_id": "citybee/demo/hj7xjcuykpwltf0cnbeu"
+    }
+  }
+}
