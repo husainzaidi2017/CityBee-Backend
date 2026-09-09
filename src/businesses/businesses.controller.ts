@@ -143,59 +143,29 @@ const slugify = (s: string) =>
     .replace(/^-|-$/g, '');
 
 /**
- * Category slug for a business kind — DYNAMIC, never hard-coded:
- *  1. Exact kind match (kind IS a category slug, e.g. "salons"),
- *  2. Plural of the kind (doctor→doctors, hotel→hotels, shop→shops,
- *     grocery→groceries, mall→malls…),
- *  3. Small irregular map for the display-name mismatches
- *     (restaurant→dining, barbers→salons handled at link time),
- *  4. resolveCategorySlug() verifies the candidate exists in
- *     public.categories before linking — unknown kinds simply skip the
- *     category link (admin can attach any category from the panel).
+ * Kind ↔ category mapping — PURE PLURAL RULES, no special cases:
+ *   kind "grocery"  → category "groceries"
+ *   kind "shop"     → category "shops"
+ *   kind "doctor"   → category "doctors"
+ * Any kind value maps to its English plural; the link step verifies the
+ * category exists in public.categories before connecting (unknown
+ * plural → no link, admin can attach any category from the panel).
  */
-const IRREGULAR_KIND_CATEGORY: Record<string, string> = {
-  restaurant: 'dining',
-  barber: 'salons',
-};
 
-/** English plural for the kind word: grocery→groceries, shop→shops… */
+/** English plural: grocery→groceries, shop→shops, box→boxes. */
 const pluralize = (kind: string): string => {
-  if (kind.endsWith('y')) return `${kind.slice(0, -1)}ies`; // grocery → groceries
-  if (/(s|x|z|ch|sh)$/.test(kind)) return `${kind}es`;      // box → boxes
-  return `${kind}s`;                                        // shop → shops, doctor → doctors
+  if (kind.endsWith('y')) return `${kind.slice(0, -1)}ies`;
+  if (/(s|x|z|ch|sh)$/.test(kind)) return `${kind}es`;
+  return `${kind}s`;
 };
 
-/** Candidate category slugs for a kind, most-specific first. */
+/** Candidate category slugs for a kind (plural first, raw kind second). */
 const categoryCandidatesForKind = (kind: string): string[] => [
-  ...(IRREGULAR_KIND_CATEGORY[kind] ? [IRREGULAR_KIND_CATEGORY[kind]] : []),
-  `${kind}s`,       // doctor → doctors, shop → shops
-  pluralize(kind),  // grocery → groceries (covers -y kinds too)
-  kind,             // kind itself might be a slug (service → service?)
+  pluralize(kind),
+  kind,
 ];
 
-/**
- * Reverse: kind for a category slug — DYNAMIC:
- *  1. Exact kind match (slug "doctors" IS a kind-like word → map via
- *     de-pluralization),
- *  2. singular of the slug (shops → shop, groceries → grocery),
- *  3. irregular map (dining → restaurant),
- *  4. fallback 'service'.
- */
-const IRREGULAR_CATEGORY_KIND: Record<string, string> = {
-  dining: 'restaurant',
-  barbers: 'salon',
-  salons: 'salon',
-  hotels: 'hotel',
-  doctors: 'doctor',
-  malls: 'mall',
-  fashion: 'shop',
-  grocery: 'shop',
-  groceries: 'shop',
-  heritage: 'shop',
-  cinemas: 'service',
-};
-
-/** Singular of a category word for kind derivation: groceries → grocery. */
+/** English singular: groceries→grocery, shops→shop, boxes→box. */
 const singularize = (word: string): string => {
   if (word.endsWith('ies')) return `${word.slice(0, -3)}y`;
   if (/(ses|xes|zes|ches|shes)$/.test(word)) return word.slice(0, -2);
@@ -203,8 +173,8 @@ const singularize = (word: string): string => {
   return word;
 };
 
+/** Candidate kinds for a category slug (singular first, raw slug second). */
 const kindCandidatesForCategory = (categorySlug: string): string[] => [
-  ...(IRREGULAR_CATEGORY_KIND[categorySlug] ? [IRREGULAR_CATEGORY_KIND[categorySlug]] : []),
   singularize(categorySlug),
   categorySlug,
 ];
