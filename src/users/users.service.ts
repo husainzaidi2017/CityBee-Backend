@@ -39,10 +39,20 @@ export class UsersService {
   }
 
   async ensureAndMe(user: AuthUser) {
+    // First-login sync: fill ONLY missing profile fields from the auth user
+    // (Google/email metadata). A user's manual profile edits are never
+    // overwritten on later logins — the conflict update only touches
+    // updated_at, and the insert below only runs for NEW rows.
     const rows = await this.db`
       insert into public.users (id, name, phone, email, profile_image_url)
       values (${user.id}::uuid, ${user.name ?? ''}, ${user.phone ?? null}, ${user.email ?? null}, ${user.avatarUrl ?? null})
-      on conflict (id) do update set updated_at = now()
+      on conflict (id) do update set
+        -- backfill blank fields only (first Google login arriving after a
+        -- partial row): never clobber user-edited values.
+        name = case when public.users.name = '' then coalesce(excluded.name, public.users.name) else public.users.name end,
+        email = coalesce(public.users.email, excluded.email),
+        profile_image_url = coalesce(public.users.profile_image_url, excluded.profile_image_url),
+        updated_at = now()
       returning id, name, phone, email, profile_image_url as "profileImageUrl", role, selected_city_id as "selectedCityId",
         ${this.selectedLocationColumns()}`;
     const stats = await this.stats(user.id);

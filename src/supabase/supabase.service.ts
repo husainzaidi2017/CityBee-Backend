@@ -45,15 +45,17 @@ export class SupabaseService {
       id: string;
       email?: string;
       phone?: string;
-      user_metadata?: { name?: string; avatar_url?: string };
+      user_metadata?: { name?: string; full_name?: string; avatar_url?: string; picture?: string };
     };
 
     const user: SupabaseUser = {
       id: raw.id,
       email: raw.email,
       phone: raw.phone,
-      name: raw.user_metadata?.name,
-      avatarUrl: raw.user_metadata?.avatar_url,
+      // Google's metadata carries full_name/picture; Supabase email users
+      // may set name. Prefer whichever the provider supplied.
+      name: raw.user_metadata?.name ?? raw.user_metadata?.full_name,
+      avatarUrl: raw.user_metadata?.avatar_url ?? raw.user_metadata?.picture,
     };
 
     this.cache.set(token, { user, expires: Date.now() + this.ttlMs });
