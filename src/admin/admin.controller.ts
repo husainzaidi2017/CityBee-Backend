@@ -167,11 +167,11 @@ export class AdminController {
 
     const cols = entries.map(([c]) => quoteIdent(c));
     const placeholders = entries.map((_, i) => `$${i + 1}`);
-    const values = entries.map(([, v]) => toSqlValue(v)) as never[];
+    const values: unknown[] = entries.map(([, v]) => toSqlValue(v));
     const table = quoteIdent(ENTITY_TABLES[key]);
     const rows = await this.db.unsafe(
       `insert into public.${table} (${cols.join(', ')}) values (${placeholders.join(', ')}) returning *`,
-      values,
+      values as never[],
     );
     return rows[0];
   }
@@ -189,12 +189,12 @@ export class AdminController {
     if (entries.length === 0) throw new BadRequestException('No valid columns provided');
 
     const sets = entries.map(([c], i) => `${quoteIdent(c)} = $${i + 1}`);
-    const values = entries.map(([, v]) => toSqlValue(v)) as never[];
+    const values: unknown[] = entries.map(([, v]) => toSqlValue(v));
     values.push(id);
     const table = quoteIdent(ENTITY_TABLES[key]);
     const rows = await this.db.unsafe(
       `update public.${table} set ${sets.join(', ')} where id = $${entries.length + 1} returning *`,
-      values,
+      values as never[],
     );
     if (!rows.length) throw new NotFoundException('Not found');
     return rows[0];
