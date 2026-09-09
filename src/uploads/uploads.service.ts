@@ -9,10 +9,17 @@ import { UploadApiResponse, v2 as cloudinary } from 'cloudinary';
  *   citybee/offers/{offerId}/
  *   citybee/places/{placeId}/
  *   citybee/profiles/{userId}/
+ *
+ * Every upload is optimized server-side before storage (free-plan friendly):
+ * longest side capped at 1200px, quality auto, WebP where supported,
+ * metadata stripped. Clients never upload raw originals to storage.
  */
 @Injectable()
 export class UploadsService {
   private readonly logger = new Logger(UploadsService.name);
+
+  /** Spec: images max out at 1200px on the longest side. */
+  private static readonly MAX_DIMENSION = 1200;
 
   constructor(private readonly config: ConfigService) {
     cloudinary.config({
@@ -38,14 +45,50 @@ export class UploadsService {
     }
   }
 
+  /**
+   * Uploads ONE optimized image. Cloudinary performs the transformation at
+   * ingestion (eager transformation stores the optimized variant — the
+   * original never occupies storage):
+   *   - c_limit,w_1200,h_1200: shrink to ≤1200px longest side
+   *   - f_auto/q_auto: WebP where supported, tuned quality
+   *   - fl_strip_profile + eager: metadata stripped on the stored asset
+   */
   async uploadImage(file: Express.Multer.File, folder: string) {
     this.assertConfigured();
     this.assertImage(file);
     try {
       const result = await new Promise<UploadApiResponse>((resolve, reject) => {
         cloudinary.uploader
-          .upload_stream({ folder, resource_type: 'image' }, (error, result) =>
-            error ? reject(error) : resolve(result!),
+          .upload_stream(
+            {
+              folder,
+              resource_type: 'image',
+              // Store the optimized variant, not the original.
+              eager: [
+                {
+                  width: UploadsService.MAX_DIMENSION,
+                  height: UploadsService.MAX_DIMENSION,
+                  crop: 'limit',
+                  fetch_format: 'auto',
+                  quality: 'auto',
+                  flags: 'strip_profile',
+                },
+              ],
+              // Return the optimized variant's URL as the canonical URL.
+              return_image_url: false,
+              format: 'webp',
+              transformation: [
+                {
+                  width: UploadsService.MAX_DIMENSION,
+                  height: UploadsService.MAX_DIMENSION,
+                  crop: 'limit',
+                  fetch_format: 'auto',
+                  quality: 'auto',
+                  flags: 'strip_profile',
+                },
+              ],
+            },
+            (error, result) => (error ? reject(error) : resolve(result!)),
           )
           .end(file.buffer);
       });
