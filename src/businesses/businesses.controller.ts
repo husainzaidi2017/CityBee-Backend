@@ -1,14 +1,19 @@
-import { Body, Controller, Get, Inject, Param, Post, Query } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Inject, Logger, Param, Post, Query, Body } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Sql } from 'postgres';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
   IsIn,
   IsLatitude,
   IsLongitude,
   IsOptional,
   IsString,
+  IsUrl,
   IsUUID,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Public } from '../auth/public.decorator';
@@ -16,6 +21,7 @@ import { CurrentUser, AuthUser } from '../auth/auth-user.decorator';
 import { DATABASE } from '../database/database.module';
 import { ListBusinessesDto, NearbyBusinessesDto, SearchBusinessesDto } from '../common/dto/query.dto';
 import { BusinessesService } from './businesses.service';
+import { UploadsService } from '../uploads/uploads.service';
 
 export class CreateBusinessDto {
   @IsString()
@@ -75,11 +81,6 @@ export class CreateBusinessDto {
   @MaxLength(120)
   slug?: string;
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  externalRef?: string;
-
   // Doctor extension (when kind = 'doctor').
   @IsOptional()
   @IsString()
@@ -106,6 +107,27 @@ export class CreateBusinessDto {
   consultationFee?: string;
 }
 
+/** One item of a bulk import: business fields + image URLs to fetch. */
+export class BulkBusinessItemDto extends CreateBusinessDto {
+  /** Public image URLs (1–5). The backend downloads, optimizes and hosts
+   *  each on Cloudinary — callers never upload binaries. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(5)
+  @IsUrl({ require_tld: true }, { each: true })
+  imageUrls?: string[];
+}
+
+export class BulkImportDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(25)
+  @ValidateNested({ each: true })
+  @Type(() => BulkBusinessItemDto)
+  businesses: BulkBusinessItemDto[];
+}
+
 const slugify = (s: string) =>
   s
     .toLowerCase()
@@ -113,13 +135,24 @@ const slugify = (s: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
 
+const categoryForKind: Record<string, string> = {
+  restaurant: 'dining',
+  doctor: 'doctors',
+  hotel: 'hotels',
+  salon: 'salons',
+  mall: 'malls',
+};
+
 @ApiTags('businesses')
 @ApiBearerAuth()
 @Controller('businesses')
 export class BusinessesController {
+  private readonly logger = new Logger(BusinessesController.name);
+
   constructor(
     private readonly businesses: BusinessesService,
     @Inject(DATABASE) private readonly db: Sql,
+    private readonly uploads: UploadsService,
   ) {}
 
   @Public()
@@ -166,17 +199,66 @@ export class BusinessesController {
   @Post()
   @ApiOperation({
     summary:
-      'Create a business (caller becomes owner; status pending until admin approval). Dedups on google_place_id.',
+      'Create a business (caller becomes owner). Dedups on google_place_id.',
   })
   async create(@CurrentUser() user: AuthUser, @Body() dto: CreateBusinessDto) {
-    // Ownership: the creator owns it; admins may create for others later.
+    return this.createOne(user, dto);
+  }
+
+  /**
+   * BULK IMPORT — one call for up to 25 businesses. For every item the
+   * backend: dedups (google_place_id/slug) → creates the business + kind
+   * extension + category link → downloads each imageUrl → optimizes (≤1200px
+   * WebP) → uploads to Cloudinary under citybee/businesses/{id}/ → links as
+   * business_images (first = primary). Item-level failures never abort the
+   * batch; every result is reported.
+   */
+  @Post('bulk')
+  @ApiOperation({
+    summary:
+      'Bulk import up to 25 businesses with image URLs in ONE call (dedup + create + image pipeline server-side)',
+  })
+  async bulkCreate(@CurrentUser() user: AuthUser, @Body() dto: BulkImportDto) {
+    const results = [] as Array<Record<string, unknown>>;
+    let created = 0;
+    let reused = 0;
+    let failed = 0;
+
+    for (const item of dto.businesses) {
+      const entry: Record<string, unknown> = { name: item.name };
+      try {
+        const made = await this.createOne(user, item);
+        entry.businessId = made.businessId;
+        entry.slug = made.slug;
+        entry.created = made.created;
+        entry.reason = made.reason;
+        made.created ? created++ : reused++;
+
+        if (item.imageUrls?.length && made.businessId) {
+          const images = await this.attachImages(made.businessId as string, item.imageUrls, item.name);
+          entry.images = images;
+        }
+      } catch (err) {
+        failed++;
+        entry.error = err instanceof BadRequestException ? err.message : 'Import failed for this item';
+        this.logger.warn(`Bulk item "${item.name}" failed: ${err instanceof Error ? err.message : err}`);
+      }
+      results.push(entry);
+    }
+
+    return { total: dto.businesses.length, created, reused, failed, results };
+  }
+
+  // ── shared internals ────────────────────────────────────────────────────
+
+  private async createOne(user: AuthUser, dto: CreateBusinessDto) {
     const slug = dto.slug ? slugify(dto.slug) : slugify(dto.name);
     const point =
       dto.latitude != null && dto.longitude != null
         ? this.db`st_setsrid(st_makepoint(${dto.longitude}, ${dto.latitude}), 4326)::geography`
         : null;
 
-    // DEDUP: same Google Place ID → return the existing business, no duplicate.
+    // DEDUP: same Google Place ID → reuse, never duplicate.
     if (dto.googlePlaceId) {
       const existing = await this.db`
         select id, slug from public.businesses where google_place_id = ${dto.googlePlaceId} limit 1`;
@@ -184,7 +266,7 @@ export class BusinessesController {
         return { businessId: existing[0].id, slug: existing[0].slug, created: false, reason: 'google_place_id_exists' };
       }
     }
-    // DEDUP: same slug → return existing.
+    // DEDUP: same slug → reuse.
     const existingSlug = await this.db`
       select id from public.businesses where slug = ${slug} limit 1`;
     if (existingSlug.length) {
@@ -215,15 +297,7 @@ export class BusinessesController {
     }
 
     // Category link for every kind with a matching discovery category —
-    // without this row the listing is invisible in category-filtered
-    // queries (the Hotels/Food/Doctors tabs all filter by category slug).
-    const categoryForKind: Record<string, string> = {
-      restaurant: 'dining',
-      doctor: 'doctors',
-      hotel: 'hotels',
-      salon: 'salons',
-      mall: 'malls',
-    };
+    // without this row the listing is invisible in category tabs.
     const categorySlug = categoryForKind[dto.kind];
     if (categorySlug) {
       await this.db`
@@ -234,6 +308,58 @@ export class BusinessesController {
     }
 
     return { businessId, slug, created: true };
+  }
+
+  /** Downloads each image URL, uploads optimized to Cloudinary, links rows. */
+  private async attachImages(businessId: string, urls: string[], name: string) {
+    const attached: Array<{ imageId: string; publicId: string }> = [];
+    for (const [i, url] of urls.entries()) {
+      try {
+        let res = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(20_000) });
+
+        // Google Places photo URLs 302-redirect to lh3.googleusercontent.com,
+        // which some datacenter networks reject. The documented fix is
+        // skipHttpRedirect=true → JSON { photoUri } pointing at the asset.
+        if (!res.ok && url.includes('places.googleapis.com')) {
+          const directJson = await fetch(
+            url + (url.includes('?') ? '&' : '?') + 'skipHttpRedirect=true',
+            { signal: AbortSignal.timeout(20_000) },
+          );
+          if (directJson.ok) {
+            const { photoUri } = (await directJson.json()) as { photoUri?: string };
+            if (photoUri) {
+              res = await fetch(photoUri, { redirect: 'follow', signal: AbortSignal.timeout(20_000) });
+            }
+          }
+        }
+
+        if (!res.ok) throw new Error(`fetch ${res.status}`);
+        const contentType = res.headers.get('content-type') ?? '';
+        if (!contentType.startsWith('image/')) throw new Error('not an image');
+        const buffer = Buffer.from(await res.arrayBuffer());
+        if (buffer.length > 10 * 1024 * 1024) throw new Error('over 10MB');
+
+        const uploaded = await this.uploads.uploadImage(
+          { buffer, mimetype: contentType, size: buffer.length } as Express.Multer.File,
+          `citybee/businesses/${businessId}`,
+        );
+
+        try {
+          await this.db`
+            insert into public.business_images (business_id, image_url, public_id, alt_text, sort_order, is_primary)
+            values (${businessId}::uuid, ${uploaded.secureUrl}, ${uploaded.publicId}, ${name}, ${i}, ${i === 0})`;
+        } catch (err) {
+          // Same Cloudinary asset already linked to this business → idempotent
+          // success for imports (re-pushing the same photo is not an error).
+          const msg = err instanceof Error ? err.message : '';
+          if (!msg.includes('business_images_public_id_uidx')) throw err;
+        }
+        attached.push({ imageId: uploaded.publicId, publicId: uploaded.publicId });
+      } catch (err) {
+        this.logger.warn(`Image ${i + 1} for "${name}" failed: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+    return attached;
   }
 
   @Public()
