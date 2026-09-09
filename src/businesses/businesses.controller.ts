@@ -29,7 +29,8 @@ export class CreateBusinessDto {
   name: string;
 
   @IsOptional()
-  @IsIn(['restaurant', 'doctor', 'hotel', 'salon', 'shop', 'mall', 'service'])
+  @IsString()
+  @MaxLength(60)
   kind?: string;
 
   @IsOptional()
@@ -288,9 +289,9 @@ export class BusinessesController {
   // ── shared internals ────────────────────────────────────────────────────
 
   private async createOne(user: AuthUser, dto: CreateBusinessDto) {
-    // kind is optional: derive from the explicit categorySlug dynamically
-    // (category "groceries" → kind "grocery"; "dining" → "restaurant").
-    const kind = dto.kind ?? this.deriveKindFromCategory(dto.categorySlug);
+    // kind is optional and unconstrained (any lowercase word); when absent it
+    // is derived from the category slug (category "groceries" → kind "grocery").
+    const kind = (dto.kind ?? this.deriveKindFromCategory(dto.categorySlug)).toLowerCase().trim();
     const slug = dto.slug ? slugify(dto.slug) : slugify(dto.name);
     const point =
       dto.latitude != null && dto.longitude != null
@@ -363,14 +364,10 @@ export class BusinessesController {
     return { businessId, slug, created: true };
   }
 
-  /** kind for a category slug (dynamic; validated against known kinds). */
+  /** kind for a category slug (dynamic: singular of the slug, raw slug next). */
   private deriveKindFromCategory(categorySlug?: string): string {
     if (!categorySlug) return 'service';
-    const KINDS = ['restaurant', 'doctor', 'hotel', 'salon', 'shop', 'mall', 'service'];
-    for (const candidate of kindCandidatesForCategory(categorySlug)) {
-      if (KINDS.includes(candidate)) return candidate;
-    }
-    return 'service';
+    return kindCandidatesForCategory(categorySlug)[0] ?? 'service';
   }
 
   /** Downloads each image URL, uploads optimized to Cloudinary, links rows. */
