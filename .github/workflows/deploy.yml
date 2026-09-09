@@ -37,15 +37,15 @@ jobs:
           GOOGLE_MAPS_SERVER_KEY: ${{ secrets.GOOGLE_MAPS_SERVER_KEY }}
         run: |
           cat > env.yaml <<EOF
-          NODE_ENV: production
+          NODE_ENV: "production"
           CORS_ORIGINS: "*"
-          SUPABASE_URL: ${SUPABASE_URL}
-          SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
-          SUPABASE_DB_URL: ${SUPABASE_DB_URL}
-          CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
-          CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
-          CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
-          GOOGLE_MAPS_SERVER_KEY: ${GOOGLE_MAPS_SERVER_KEY}
+          SUPABASE_URL: "${SUPABASE_URL}"
+          SUPABASE_ANON_KEY: "${SUPABASE_ANON_KEY}"
+          SUPABASE_DB_URL: "${SUPABASE_DB_URL}"
+          CLOUDINARY_CLOUD_NAME: "${CLOUDINARY_CLOUD_NAME}"
+          CLOUDINARY_API_KEY: "${CLOUDINARY_API_KEY}"
+          CLOUDINARY_API_SECRET: "${CLOUDINARY_API_SECRET}"
+          GOOGLE_MAPS_SERVER_KEY: "${GOOGLE_MAPS_SERVER_KEY}"
           EOF
           gcloud run deploy citybee --source . --region asia-south2 --allow-unauthenticated --env-vars-file env.yaml --quiet
 
