@@ -340,26 +340,19 @@ export class BusinessesController {
         on conflict (business_id) do nothing`;
     }
 
-    // Category link — dynamic: explicit categorySlug wins; otherwise the
-    // kind's plural is resolved against the categories table so NEW
-    // categories (groceries, shops…) work without code changes.
-    if (dto.categorySlug) {
-      await this.db`
-        insert into public.business_categories (business_id, category_id)
-        select ${businessId}::uuid, c.id from public.categories c
-        where c.slug = ${dto.categorySlug}
-        on conflict do nothing`;
-    } else {
-      // Candidates: plural forms + the raw kind — link whichever exists.
-      const candidates = categoryCandidatesForKind(kind);
-      await this.db`
-        insert into public.business_categories (business_id, category_id)
-        select ${businessId}::uuid, c.id from public.categories c
-        where c.slug = any(${candidates}::text[])
-        order by array_position(${candidates}::text[], c.slug)
-        limit 1
-        on conflict do nothing`;
-    }
+    // Category link — resolved by plural logic: explicit categorySlug is the
+    // preferred candidate, then the kind's plural forms; first slug that
+    // exists in the categories table wins (kind "gym" → "gyms" → "gym").
+    const candidates = dto.categorySlug
+      ? [dto.categorySlug, ...categoryCandidatesForKind(kind)]
+      : categoryCandidatesForKind(kind);
+    await this.db`
+      insert into public.business_categories (business_id, category_id)
+      select ${businessId}::uuid, c.id from public.categories c
+      where c.slug = any(${candidates}::text[])
+      order by array_position(${candidates}::text[], c.slug)
+      limit 1
+      on conflict do nothing`;
 
     return { businessId, slug, created: true };
   }
