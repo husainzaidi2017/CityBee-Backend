@@ -148,6 +148,7 @@ const categoryForKind: Record<string, string> = {
   hotel: 'hotels',
   salon: 'salons',
   mall: 'malls',
+   fashion: 'fashion',
 };
 
 @ApiTags('businesses')
