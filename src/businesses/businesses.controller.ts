@@ -280,7 +280,11 @@ export class BusinessesController {
       values (
         ${slug}, ${dto.name}, ${dto.kind}, ${dto.tagline ?? ''}, ${dto.description ?? ''},
         ${dto.phone ?? null}, ${dto.whatsapp ?? null}, ${dto.address ?? ''}, ${dto.locality ?? null},
-        (select id from public.cities where slug = 'moradabad'),
+        ${
+          dto.latitude != null && dto.longitude != null
+            ? this.db`(select id from public.cities order by ((latitude - ${dto.latitude}) * (latitude - ${dto.latitude}) + (longitude - ${dto.longitude}) * (longitude - ${dto.longitude})) limit 1)`
+            : this.db`(select id from public.cities where slug = 'moradabad')`
+        },
         ${point}, ${dto.googlePlaceId ?? null}, 'approved', ${user.id}::uuid
       )
       on conflict (slug) do update set updated_at = now()
