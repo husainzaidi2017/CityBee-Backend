@@ -14,10 +14,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Decode service account key
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          if [ -z "$GCP_SA_KEY" ]; then
+            echo "::error::GCP_SA_KEY secret is not set. Add it in repo Settings > Secrets > Actions (paste the FULL service-account JSON key contents — raw JSON or base64, both work)."
+            exit 1
+          fi
+          # Auto-detect: if it starts with '{' it's raw JSON; otherwise base64.
+          if printf '%s' "$GCP_SA_KEY" | head -c 1 | grep -q '{'; then
+            printf '%s' "$GCP_SA_KEY" > /tmp/sa-key.json
+          else
+            printf '%s' "$GCP_SA_KEY" | base64 -d > /tmp/sa-key.json 2>/dev/null ||             printf '%s' "$GCP_SA_KEY" | base64 -D > /tmp/sa-key.json
+          fi
+          # Validate it parses as JSON.
+          node -e "JSON.parse(require('fs').readFileSync('/tmp/sa-key.json','utf8'))" || {
+            echo "::error::GCP_SA_KEY is neither valid JSON nor valid base64 JSON."
+            exit 1
+          }
+          echo "SA_KEY_FILE=/tmp/sa-key.json" >> "$GITHUB_ENV"
+
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          # Service-account key secret (base64 JSON) OR workload identity.
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up Cloud SDK
