@@ -313,7 +313,7 @@ export class BusinessesController {
 
     // Category link — explicit categorySlug wins; otherwise the kind map.
     // Without this row the listing is invisible in category tabs.
-    const categorySlug = dto.categorySlug ?? categoryForKind[dto.kind];
+    const categorySlug = dto.categorySlug ?? categoryForKind[kind];
     if (categorySlug) {
       await this.db`
         insert into public.business_categories (business_id, category_id)
