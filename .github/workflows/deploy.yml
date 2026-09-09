@@ -1,0 +1,49 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # workload identity federation
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          # Service-account key secret (base64 JSON) OR workload identity.
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry (optional local cache)
+        run: gcloud auth configure-docker --quiet
+
+      - name: Deploy service
+        run: |
+          gcloud run deploy citybee \
+            --source . \
+            --region asia-south2 \
+            --allow-unauthenticated \
+            --set-env-vars \
+              NODE_ENV=production,\
+              CORS_ORIGINS=*,\
+              SUPABASE_URL=${{ secrets.SUPABASE_URL }},\
+              SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }},\
+              SUPABASE_DB_URL=${{ secrets.SUPABASE_DB_URL }},\
+              SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }},\
+              CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }},\
+              CLOUDINARY_API_KEY=${{ secrets.CLOUDINARY_API_KEY }},\
+              CLOUDINARY_API_SECRET=${{ secrets.CLOUDINARY_API_SECRET }},\
+              GOOGLE_MAPS_SERVER_KEY=${{ secrets.GOOGLE_MAPS_SERVER_KEY }} \
+            --quiet
+
+      - name: Show URL
+        run: gcloud run services describe citybee --region asia-south2 --format 'value(status.url)'

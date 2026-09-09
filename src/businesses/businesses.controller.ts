@@ -28,8 +28,9 @@ export class CreateBusinessDto {
   @MaxLength(160)
   name: string;
 
+  @IsOptional()
   @IsIn(['restaurant', 'doctor', 'hotel', 'salon', 'shop', 'mall', 'service'])
-  kind: string;
+  kind?: string;
 
   @IsOptional()
   @IsString()
@@ -80,6 +81,12 @@ export class CreateBusinessDto {
   @IsString()
   @MaxLength(120)
   slug?: string;
+
+  /** Direct category link (slug). Falls back to the kind→category map. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  categorySlug?: string;
 
   // Doctor extension (when kind = 'doctor').
   @IsOptional()
@@ -253,6 +260,10 @@ export class BusinessesController {
   // ── shared internals ────────────────────────────────────────────────────
 
   private async createOne(user: AuthUser, dto: CreateBusinessDto) {
+    // kind is optional: derive from the explicit categorySlug when absent.
+    const kind =
+      dto.kind ??
+      (dto.categorySlug ? kindForCategory[dto.categorySlug] ?? 'service' : 'service');
     const slug = dto.slug ? slugify(dto.slug) : slugify(dto.name);
     const point =
       dto.latitude != null && dto.longitude != null
@@ -279,7 +290,7 @@ export class BusinessesController {
         (slug, name, kind, tagline, description, phone, whatsapp, address, locality,
          city_id, location, google_place_id, status, owner_id)
       values (
-        ${slug}, ${dto.name}, ${dto.kind}, ${dto.tagline ?? ''}, ${dto.description ?? ''},
+        ${slug}, ${dto.name}, ${kind}, ${dto.tagline ?? ''}, ${dto.description ?? ''},
         ${dto.phone ?? null}, ${dto.whatsapp ?? null}, ${dto.address ?? ''}, ${dto.locality ?? null},
         ${
           dto.latitude != null && dto.longitude != null
@@ -293,7 +304,7 @@ export class BusinessesController {
     const businessId = rows[0].id as string;
 
     // Doctor extension row.
-    if (dto.kind === 'doctor') {
+    if (kind === 'doctor') {
       await this.db`
         insert into public.doctors (business_id, name, specialization, qualification, experience_years, consultation_fee)
         values (${businessId}::uuid, ${dto.doctorName ?? dto.name}, ${dto.specialization ?? ''},
@@ -301,9 +312,9 @@ export class BusinessesController {
         on conflict (business_id) do nothing`;
     }
 
-    // Category link for every kind with a matching discovery category —
-    // without this row the listing is invisible in category tabs.
-    const categorySlug = categoryForKind[dto.kind];
+    // Category link — explicit categorySlug wins; otherwise the kind map.
+    // Without this row the listing is invisible in category tabs.
+    const categorySlug = dto.categorySlug ?? categoryForKind[kind];
     if (categorySlug) {
       await this.db`
         insert into public.business_categories (business_id, category_id)
