@@ -27,23 +27,27 @@ jobs:
         run: gcloud auth configure-docker --quiet
 
       - name: Deploy service
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+          GOOGLE_MAPS_SERVER_KEY: ${{ secrets.GOOGLE_MAPS_SERVER_KEY }}
         run: |
-          gcloud run deploy citybee \
-            --source . \
-            --region asia-south2 \
-            --allow-unauthenticated \
-            --set-env-vars \
-              NODE_ENV=production,\
-              CORS_ORIGINS=*,\
-              SUPABASE_URL=${{ secrets.SUPABASE_URL }},\
-              SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }},\
-              SUPABASE_DB_URL=${{ secrets.SUPABASE_DB_URL }},\
-              SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }},\
-              CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }},\
-              CLOUDINARY_API_KEY=${{ secrets.CLOUDINARY_API_KEY }},\
-              CLOUDINARY_API_SECRET=${{ secrets.CLOUDINARY_API_SECRET }},\
-              GOOGLE_MAPS_SERVER_KEY=${{ secrets.GOOGLE_MAPS_SERVER_KEY }} \
-            --quiet
+          cat > env.yaml <<EOF
+          NODE_ENV: production
+          CORS_ORIGINS: "*"
+          SUPABASE_URL: ${SUPABASE_URL}
+          SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+          SUPABASE_DB_URL: ${SUPABASE_DB_URL}
+          CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
+          CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
+          CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+          GOOGLE_MAPS_SERVER_KEY: ${GOOGLE_MAPS_SERVER_KEY}
+          EOF
+          gcloud run deploy citybee --source . --region asia-south2 --allow-unauthenticated --env-vars-file env.yaml --quiet
 
       - name: Show URL
         run: gcloud run services describe citybee --region asia-south2 --format 'value(status.url)'
