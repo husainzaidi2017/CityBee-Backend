@@ -212,11 +212,24 @@ export class BusinessesController {
         values (${businessId}::uuid, ${dto.doctorName ?? dto.name}, ${dto.specialization ?? ''},
                 ${dto.qualification ?? null}, ${dto.experienceYears ?? null}, ${dto.consultationFee ?? null})
         on conflict (business_id) do nothing`;
-      // Ensure the doctor-category link exists.
+    }
+
+    // Category link for every kind with a matching discovery category —
+    // without this row the listing is invisible in category-filtered
+    // queries (the Hotels/Food/Doctors tabs all filter by category slug).
+    const categoryForKind: Record<string, string> = {
+      restaurant: 'dining',
+      doctor: 'doctors',
+      hotel: 'hotels',
+      salon: 'salons',
+      mall: 'malls',
+    };
+    const categorySlug = categoryForKind[dto.kind];
+    if (categorySlug) {
       await this.db`
         insert into public.business_categories (business_id, category_id)
         select ${businessId}::uuid, c.id from public.categories c
-        where c.slug = 'doctors'
+        where c.slug = ${categorySlug}
         on conflict do nothing`;
     }
 
