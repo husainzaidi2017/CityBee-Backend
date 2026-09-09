@@ -142,14 +142,72 @@ const slugify = (s: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
 
-const categoryForKind: Record<string, string> = {
+/**
+ * Category slug for a business kind — DYNAMIC, never hard-coded:
+ *  1. Exact kind match (kind IS a category slug, e.g. "salons"),
+ *  2. Plural of the kind (doctor→doctors, hotel→hotels, shop→shops,
+ *     grocery→groceries, mall→malls…),
+ *  3. Small irregular map for the display-name mismatches
+ *     (restaurant→dining, barbers→salons handled at link time),
+ *  4. resolveCategorySlug() verifies the candidate exists in
+ *     public.categories before linking — unknown kinds simply skip the
+ *     category link (admin can attach any category from the panel).
+ */
+const IRREGULAR_KIND_CATEGORY: Record<string, string> = {
   restaurant: 'dining',
-  doctor: 'doctors',
-  hotel: 'hotels',
-  salon: 'salons',
-  mall: 'malls',
-   fashion: 'fashion',
+  barber: 'salons',
 };
+
+/** English plural for the kind word: grocery→groceries, shop→shops… */
+const pluralize = (kind: string): string => {
+  if (kind.endsWith('y')) return `${kind.slice(0, -1)}ies`; // grocery → groceries
+  if (/(s|x|z|ch|sh)$/.test(kind)) return `${kind}es`;      // box → boxes
+  return `${kind}s`;                                        // shop → shops, doctor → doctors
+};
+
+/** Candidate category slugs for a kind, most-specific first. */
+const categoryCandidatesForKind = (kind: string): string[] => [
+  ...(IRREGULAR_KIND_CATEGORY[kind] ? [IRREGULAR_KIND_CATEGORY[kind]] : []),
+  `${kind}s`,       // doctor → doctors, shop → shops
+  pluralize(kind),  // grocery → groceries (covers -y kinds too)
+  kind,             // kind itself might be a slug (service → service?)
+];
+
+/**
+ * Reverse: kind for a category slug — DYNAMIC:
+ *  1. Exact kind match (slug "doctors" IS a kind-like word → map via
+ *     de-pluralization),
+ *  2. singular of the slug (shops → shop, groceries → grocery),
+ *  3. irregular map (dining → restaurant),
+ *  4. fallback 'service'.
+ */
+const IRREGULAR_CATEGORY_KIND: Record<string, string> = {
+  dining: 'restaurant',
+  barbers: 'salon',
+  salons: 'salon',
+  hotels: 'hotel',
+  doctors: 'doctor',
+  malls: 'mall',
+  fashion: 'shop',
+  grocery: 'shop',
+  groceries: 'shop',
+  heritage: 'shop',
+  cinemas: 'service',
+};
+
+/** Singular of a category word for kind derivation: groceries → grocery. */
+const singularize = (word: string): string => {
+  if (word.endsWith('ies')) return `${word.slice(0, -3)}y`;
+  if (/(ses|xes|zes|ches|shes)$/.test(word)) return word.slice(0, -2);
+  if (word.endsWith('s') && !word.endsWith('ss')) return word.slice(0, -1);
+  return word;
+};
+
+const kindCandidatesForCategory = (categorySlug: string): string[] => [
+  ...(IRREGULAR_CATEGORY_KIND[categorySlug] ? [IRREGULAR_CATEGORY_KIND[categorySlug]] : []),
+  singularize(categorySlug),
+  categorySlug,
+];
 
 @ApiTags('businesses')
 @ApiBearerAuth()
@@ -260,10 +318,9 @@ export class BusinessesController {
   // ── shared internals ────────────────────────────────────────────────────
 
   private async createOne(user: AuthUser, dto: CreateBusinessDto) {
-    // kind is optional: derive from the explicit categorySlug when absent.
-    const kind =
-      dto.kind ??
-      (dto.categorySlug ? kindForCategory[dto.categorySlug] ?? 'service' : 'service');
+    // kind is optional: derive from the explicit categorySlug dynamically
+    // (category "groceries" → kind "grocery"; "dining" → "restaurant").
+    const kind = dto.kind ?? this.deriveKindFromCategory(dto.categorySlug);
     const slug = dto.slug ? slugify(dto.slug) : slugify(dto.name);
     const point =
       dto.latitude != null && dto.longitude != null
@@ -312,18 +369,38 @@ export class BusinessesController {
         on conflict (business_id) do nothing`;
     }
 
-    // Category link — explicit categorySlug wins; otherwise the kind map.
-    // Without this row the listing is invisible in category tabs.
-    const categorySlug = dto.categorySlug ?? categoryForKind[kind];
-    if (categorySlug) {
+    // Category link — dynamic: explicit categorySlug wins; otherwise the
+    // kind's plural is resolved against the categories table so NEW
+    // categories (groceries, shops…) work without code changes.
+    if (dto.categorySlug) {
       await this.db`
         insert into public.business_categories (business_id, category_id)
         select ${businessId}::uuid, c.id from public.categories c
-        where c.slug = ${categorySlug}
+        where c.slug = ${dto.categorySlug}
+        on conflict do nothing`;
+    } else {
+      // Candidates: plural forms + the raw kind — link whichever exists.
+      const candidates = categoryCandidatesForKind(kind);
+      await this.db`
+        insert into public.business_categories (business_id, category_id)
+        select ${businessId}::uuid, c.id from public.categories c
+        where c.slug = any(${candidates}::text[])
+        order by array_position(${candidates}::text[], c.slug)
+        limit 1
         on conflict do nothing`;
     }
 
     return { businessId, slug, created: true };
+  }
+
+  /** kind for a category slug (dynamic; validated against known kinds). */
+  private deriveKindFromCategory(categorySlug?: string): string {
+    if (!categorySlug) return 'service';
+    const KINDS = ['restaurant', 'doctor', 'hotel', 'salon', 'shop', 'mall', 'service'];
+    for (const candidate of kindCandidatesForCategory(categorySlug)) {
+      if (KINDS.includes(candidate)) return candidate;
+    }
+    return 'service';
   }
 
   /** Downloads each image URL, uploads optimized to Cloudinary, links rows. */
