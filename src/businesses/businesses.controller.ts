@@ -113,6 +113,46 @@ export class CreateBusinessDto {
   @IsString()
   @MaxLength(40)
   consultationFee?: string;
+
+  // Restaurant extension (when kind = 'restaurant').
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  cuisine?: string;
+
+  @IsOptional()
+  @IsIn(['veg', 'non_veg', 'mixed'])
+  vegType?: string;
+
+  /** Shared by restaurants ("₹₹") and hotels ("₹1,400–₹2,800 / night"). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  priceRange?: string;
+
+  // Hotel extension (when kind = 'hotel').
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  hotelType?: string;
+
+  /** "12:00 PM" or 24h "12:00" — converted to a Postgres time value. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(11)
+  checkInTime?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(11)
+  checkOutTime?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(12)
+  @IsString({ each: true })
+  @MaxLength(60, { each: true })
+  amenities?: string[];
 }
 
 /** One item of a bulk import: business fields + image URLs to fetch. */
@@ -142,6 +182,19 @@ const slugify = (s: string) =>
     .trim()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
+
+/** "12:00 PM" / "12:00" / "12:30:00" → Postgres time string; else null. */
+const toTime = (s?: string): string | null => {
+  if (!s) return null;
+  const m = s.trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(am|pm)?$/i);
+  if (!m) return null;
+  let h = Number(m[1]);
+  const ap = m[3]?.toLowerCase();
+  if (ap === 'pm' && h < 12) h += 12;
+  if (ap === 'am' && h === 12) h = 0;
+  if (h > 23) return null;
+  return `${String(h).padStart(2, '0')}:${m[2]}:00`;
+};
 
 /**
  * Kind ↔ category mapping — PURE PLURAL RULES, no special cases:
@@ -338,6 +391,33 @@ export class BusinessesController {
         values (${businessId}::uuid, ${dto.doctorName ?? dto.name}, ${dto.specialization ?? ''},
                 ${dto.qualification ?? null}, ${dto.experienceYears ?? null}, ${dto.consultationFee ?? null})
         on conflict (business_id) do nothing`;
+    }
+
+    // Restaurant extension row.
+    if (kind === 'restaurant' && (dto.cuisine || dto.vegType || dto.priceRange)) {
+      await this.db`
+        insert into public.restaurants (business_id, cuisine, price_range, veg_type)
+        values (${businessId}::uuid, ${dto.cuisine ?? null}, ${dto.priceRange ?? null},
+                ${dto.vegType ?? 'mixed'})
+        on conflict (business_id) do nothing`;
+    }
+
+    // Hotel extension row + amenities.
+    if (kind === 'hotel' && (dto.hotelType || dto.priceRange)) {
+      const hotelRows = await this.db`
+        insert into public.hotels (business_id, hotel_type, price_range, check_in, check_out)
+        values (${businessId}::uuid, ${dto.hotelType ?? null}, ${dto.priceRange ?? null},
+                ${toTime(dto.checkInTime)}, ${toTime(dto.checkOutTime)})
+        on conflict (business_id) do update set updated_at = now()
+        returning id`;
+      const hotelId = hotelRows[0]?.id as string | undefined;
+      const list = (dto.amenities ?? []).map((a) => a.trim()).filter(Boolean).slice(0, 12);
+      if (hotelId && list.length > 0) {
+        await this.db`
+          insert into public.hotel_amenities (hotel_id, amenity)
+          select ${hotelId}::uuid, a from unnest(${list}::text[]) as t(a)
+          on conflict do nothing`;
+      }
     }
 
     // Category link — resolved by plural logic: explicit categorySlug is the
