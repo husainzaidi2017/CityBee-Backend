@@ -195,9 +195,18 @@ export class BusinessesService {
     if (!rows.length) throw new NotFoundException('Business not found');
     const row = BusinessesService.mapRow(rows[0]);
 
-    const menu = await this.db`
-      select name, description, price, image_url, is_veg from public.menu_items
-      where business_id = ${row.id}::uuid order by sort_order`;
+    // Menu items (dishes — restaurants) + business services (rooms, plans,
+    // treatments — every other kind) merge into one item list so all
+    // detail pages share the same items section shape.
+    const [menu, services] = await Promise.all([
+      this.db`
+        select name, description, price, image_url, is_veg from public.menu_items
+        where business_id = ${row.id}::uuid order by sort_order`,
+      this.db`
+        select name, description, price from public.business_services
+        where business_id = ${row.id}::uuid and active
+        order by sort_order`,
+    ]);
     const reviews = await this.db`
       select rv.id, rv.rating, rv.review_text, rv.created_at,
              coalesce(u.name, 'CityBee user') as author, u.id as user_id
@@ -207,13 +216,22 @@ export class BusinessesService {
 
     return {
       ...toBusiness(row),
-      menu: menu.map((m) => ({
-        name: m.name,
-        description: m.description,
-        price: m.price,
-        image: m.image_url,
-        isVeg: m.is_veg,
-      })),
+      menu: [
+        ...menu.map((m) => ({
+          name: m.name,
+          description: m.description,
+          price: m.price,
+          image: m.image_url,
+          isVeg: m.is_veg,
+        })),
+        ...services.map((svc) => ({
+          name: svc.name,
+          description: svc.description,
+          price: svc.price,
+          image: null,
+          isVeg: null,
+        })),
+      ],
       reviews: reviews.map((r) => ({
         id: r.id,
         author: r.author,
