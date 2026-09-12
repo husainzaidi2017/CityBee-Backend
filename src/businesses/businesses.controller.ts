@@ -497,8 +497,18 @@ export class BusinessesController {
 
   @Public()
   @Get(':id')
-  @ApiOperation({ summary: 'Business detail by UUID or slug (with menu, reviews, extensions)' })
-  findOne(@Param('id') id: string) {
-    return this.businesses.findByIdOrSlug(id);
+  @ApiOperation({ summary: 'Business detail by UUID or slug (with menu, reviews, extensions; lat/lng adds distance)' })
+  findOne(
+    @Param('id') id: string,
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string,
+  ) {
+    const latitude = lat != null ? Number.parseFloat(lat) : undefined;
+    const longitude = lng != null ? Number.parseFloat(lng) : undefined;
+    const validLat =
+      latitude != null && Number.isFinite(latitude) ? latitude : undefined;
+    const validLng =
+      longitude != null && Number.isFinite(longitude) ? longitude : undefined;
+    return this.businesses.findByIdOrSlug(id, validLat, validLng);
   }
 }

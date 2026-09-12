@@ -79,7 +79,7 @@ export class BusinessesService {
             bio: row.doctor_bio as string | null,
           }
         : null,
-      hotel: row.hotel_type
+      hotel: row.hotel_type !== null && row.hotel_type !== undefined
         ? {
             hotel_type: row.hotel_type as string | null,
             price_range: row.hotel_price_range as string | null,
@@ -179,10 +179,14 @@ export class BusinessesService {
     return paginate(rows.map(BusinessesService.mapRow).map(toBusiness), total, opts.page, opts.limit);
   }
 
-  async findByIdOrSlug(idOrSlug: string) {
+  async findByIdOrSlug(idOrSlug: string, lat?: number, lng?: number) {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
+    const point =
+      lat != null && lng != null
+        ? this.db`st_setsrid(st_makepoint(${lng}, ${lat}), 4326)::geography`
+        : null;
     const rows = (await this.db`
-      ${this.baseSelect()}
+      ${this.baseSelect(point ? [this.db`st_distance(b.location, ${point}) as distance_m`] : [])}
       where ${isUuid ? this.db`b.id = ${idOrSlug}::uuid` : this.db`b.slug = ${idOrSlug}`}
         and b.status = 'approved'
       limit 1

@@ -16,11 +16,14 @@ import { DoctorsModule } from './doctors/doctors.module';
 import { RestaurantsModule } from './restaurants/restaurants.module';
 import { HotelsModule } from './hotels/hotels.module';
 import { PlacesModule } from './places/places.module';
+import { ServicesModule } from './services/services.module';
 import { FavoritesModule } from './favorites/favorites.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { AdminModule } from './admin/admin.module';
+import { MeModule } from './me/me.module';
+import { ListingsModule } from './listings/listings.module';
 
 @Module({
   imports: [
@@ -40,11 +43,14 @@ import { AdminModule } from './admin/admin.module';
     RestaurantsModule,
     HotelsModule,
     PlacesModule,
+    ServicesModule,
     FavoritesModule,
     ReviewsModule,
     NotificationsModule,
     UploadsModule,
     AdminModule,
+    MeModule,
+    ListingsModule,
   ],
 })
 export class AppModule {}
