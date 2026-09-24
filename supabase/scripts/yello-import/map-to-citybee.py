@@ -49,12 +49,42 @@ KIND_NOUN = {
     "mall": "shopping centre",
     "doctor": "medical clinic",
     "shop": "store",
+    "service": "business",
 }
 CAT_LABEL = {
     "restaurants": "Restaurant", "hotels": "Hotel", "cafes": "Café", "salons": "Beauty Salon",
     "gyms": "Fitness Centre", "bars": "Bar", "malls": "Shopping Centre", "doctors": "Clinic",
     "shops": "Store",
 }
+
+# yello files some businesses under the wrong directory category (a transport
+# company sits in "Hotels", a beauty lounge in "Fitness"). Business-name signals
+# correct the obvious mismatches; restaurants/doctors are left alone because
+# those names legitimately carry words like "cafe", "spa" or "clinic".
+NAME_KIND_RULES = [
+    (re.compile(r"\b(travel|tourism|tourist|transport|buses|rent a car|car rental|typing|visa)\b", re.I),
+     "service", None),
+    (re.compile(r"\b(salon|beauty|barber)\b", re.I), "salon", "salons"),
+    (re.compile(r"\b(gym|fitness|crossfit|pilates)\b", re.I), "gym", "gyms"),
+    (re.compile(r"\b(pub|night ?club)\b", re.I), "bar", "bars"),
+]
+PROTECTED_KINDS = {"restaurant", "doctor"}
+
+
+def fix_kind(kind: str, category: str, name: str):
+    """Correct obvious source miscategorisations by business name."""
+    for rx, new_kind, new_cat in NAME_KIND_RULES:
+        if not rx.search(name or ""):
+            continue
+        if kind == new_kind:
+            return kind, category
+        if kind == "hotel" and new_kind == "service":
+            # travel/transport listed under Hotels — no CityBee category fits
+            return "service", None
+        if kind in PROTECTED_KINDS:
+            return kind, category
+        return new_kind, new_cat or category
+    return kind, category
 
 
 def slugify(s: str) -> str:
@@ -220,6 +250,7 @@ def main():
 
             city_slug, city_name = resolve_city(rec)
             locality = derive_locality(rec)
+            kind, category = fix_kind(rec["kind"], rec["category"], name)
 
             base = slugify(name)
             slug = base
@@ -233,13 +264,14 @@ def main():
                 skipped_namedup += 1
             seen_slugs.add(slug)
 
+            fixed = dict(rec, kind=kind, category=category)
             rows.append({
                 "slug": slug,
                 "name": name,
-                "kind": rec["kind"],
-                "category": rec["category"],
-                "tagline": make_tagline(rec, city_name),
-                "description": make_description(rec, city_name, locality),
+                "kind": kind,
+                "category": category,
+                "tagline": make_tagline(fixed, city_name),
+                "description": make_description(fixed, city_name, locality),
                 "phone": norm_phone(rec.get("phone")),
                 "address": rec.get("address") or "",
                 "locality": locality,
