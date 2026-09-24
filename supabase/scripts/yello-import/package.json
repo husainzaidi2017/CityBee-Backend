@@ -1,0 +1,9 @@
+{
+  "name": "yello-import",
+  "private": true,
+  "type": "module",
+  "description": "yello.ae -> CityBee business importer (see README.md)",
+  "dependencies": {
+    "postgres": "^3.4.5"
+  }
+}

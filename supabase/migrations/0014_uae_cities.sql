@@ -12,6 +12,8 @@ values
   ('umm-al-quwain',  'Umm Al Quwain',  'Umm Al Quwain',  'United Arab Emirates', 'AE', 25.56473,   55.55517),
   ('al-ain',         'Al Ain',         'Abu Dhabi',      'United Arab Emirates', 'AE', 24.130162,  55.802312)
 on conflict (slug) do update set
+  name = excluded.name,
+  state_region = excluded.state_region,
   latitude = excluded.latitude,
   longitude = excluded.longitude,
   country = excluded.country,
